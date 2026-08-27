@@ -1,0 +1,7 @@
+pizza sushi risotto torta
+-pizza sushi -risotto
+pizza -sushi risotto
+-risotto
+-sushi
+risotto
+sushi
