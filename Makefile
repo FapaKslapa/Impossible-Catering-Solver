@@ -8,7 +8,11 @@ TEST_DIR = tests/unit
 bernardo: $(SRC_DIR)/main.c
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -o bernardo $(SRC_DIR)/main.c
 
-test:
+test_line_reader: $(TEST_DIR)/test_line_reader.c $(SRC_DIR)/line_reader.c
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $^
+
+test: test_line_reader
+	./test_line_reader
 
 clean:
 	rm -f bernardo Lode Lode.c
