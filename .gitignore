@@ -1,3 +1,14 @@
 cmake-build-debug/
 .idea/
 *.md
+Lode.c
+Lode
+bernardo
+test_line_reader
+test_token_scanner
+test_dish_table
+test_formula_parser
+test_sat_propagate
+test_sat_solver
+test_threshold_search
+test_result_printer
