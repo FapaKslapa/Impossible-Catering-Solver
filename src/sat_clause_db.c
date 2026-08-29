@@ -121,7 +121,7 @@ int sat_add_learned_clause(SatSolver *solver, const int *literals, int size) {
         int count_before_reduce = solver->learned_clause_count;
         sat_reduce_learned_clauses(solver);
         if (solver->learned_clause_count >= count_before_reduce) {
-            break;
+            return -1;
         }
     }
 

@@ -212,11 +212,48 @@ static void test_reduce_self_overlapping_copy(void) {
     sat_solver_destroy(solver);
 }
 
+static void test_add_learned_clause_fails_when_fully_locked(void) {
+    int variable_count = SAT_MAX_LEARNED_CLAUSES;
+    Formula formula = empty_formula(variable_count);
+    SatSolver *solver = sat_solver_create(&formula);
+    solver->learned_clause_count = 0;
+    solver->learned_literal_pool_size = 0;
+    for (int i = 0; i < variable_count; i++) {
+        solver->watch_head[2 * i] = -1;
+        solver->watch_head[2 * i + 1] = -1;
+        solver->decision_level[i] = -1;
+        solver->antecedent[i] = -1;
+        solver->assignment[i] = VALUE_UNASSIGNED;
+    }
+
+    for (int i = 0; i < SAT_MAX_LEARNED_CLAUSES; i++) {
+        int clause[] = {lit_pos(i)};
+        int index = sat_add_learned_clause(solver, clause, 1);
+        solver->assignment[i] = VALUE_TRUE;
+        solver->antecedent[i] = index;
+    }
+
+    assert(solver->learned_clause_count == SAT_MAX_LEARNED_CLAUSES);
+
+    int count_before = solver->learned_clause_count;
+    int pool_size_before = solver->learned_literal_pool_size;
+
+    int overflow_clause[] = {lit_pos(0)};
+    int result = sat_add_learned_clause(solver, overflow_clause, 1);
+
+    assert(result == -1);
+    assert(solver->learned_clause_count == count_before);
+    assert(solver->learned_literal_pool_size == pool_size_before);
+
+    sat_solver_destroy(solver);
+}
+
 int main(void) {
     test_add_and_read_back();
     test_reduce_preserves_locked_clause();
     test_reduce_preserves_content_after_compaction();
     test_reduce_self_overlapping_copy();
+    test_add_learned_clause_fails_when_fully_locked();
     printf("test_sat_clause_db: OK\n");
     return 0;
 }

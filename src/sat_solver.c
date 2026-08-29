@@ -192,6 +192,10 @@ static bool sat_search(SatSolver *solver) {
             int learned_size = sat_analyze_conflict(solver, conflict_clause, solver->conflict_scratch, &backjump_level);
             undo_to_level(solver, backjump_level);
             int learned_index = sat_add_learned_clause(solver, solver->conflict_scratch, learned_size);
+            if (learned_index < 0) {
+                undo_to_level(solver, 0);
+                continue;
+            }
             sat_enqueue(solver, solver->conflict_scratch[0], learned_index);
 
             solver->conflicts_since_restart++;
