@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
 
-OUT=Lode.c
+mkdir -p out
+OUT=out/Lode.c
 : > "$OUT"
 
 HEADERS="src/line_reader.h src/token_scanner.h src/dish_table.h src/formula.h src/formula_parser.h src/sat_solver.h src/sat_restart.h src/sat_clause_db.h src/sat_conflict_analysis.h src/sat_internal.h src/threshold_search.h src/result_printer.h"
