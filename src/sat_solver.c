@@ -148,3 +148,62 @@ bool sat_solver_reset_and_setup(SatSolver *solver, int prefix_length) {
     free(has_negative);
     return ok;
 }
+
+static int pick_unassigned_variable(SatSolver *solver) {
+    for (int i = 0; i < solver->relevant_variable_count; i++) {
+        int variable = solver->relevant_variables[i];
+        if (solver->assignment[variable] == VALUE_UNASSIGNED) {
+            return variable;
+        }
+    }
+    return -1;
+}
+
+static void undo_to_trail_size(SatSolver *solver, int target_trail_size) {
+    while (solver->trail_size > target_trail_size) {
+        solver->trail_size--;
+        int literal = solver->trail[solver->trail_size];
+        solver->assignment[lit_variable(literal)] = VALUE_UNASSIGNED;
+    }
+    solver->propagation_queue_head = solver->trail_size;
+    solver->propagation_queue_tail = solver->trail_size;
+}
+
+static bool sat_search(SatSolver *solver) {
+    for (;;) {
+        bool no_conflict = sat_propagate(solver);
+        if (!no_conflict) {
+            while (solver->decisions_size > 0 &&
+                   solver->decisions[solver->decisions_size - 1].tried_false) {
+                solver->decisions_size--;
+            }
+            if (solver->decisions_size == 0) {
+                return false;
+            }
+            Decision *decision = &solver->decisions[solver->decisions_size - 1];
+            undo_to_trail_size(solver, decision->trail_position);
+            decision->tried_false = true;
+            sat_enqueue(solver, lit_neg(decision->variable));
+            continue;
+        }
+
+        int variable = pick_unassigned_variable(solver);
+        if (variable == -1) {
+            return true;
+        }
+
+        solver->decisions[solver->decisions_size].variable = variable;
+        solver->decisions[solver->decisions_size].tried_false = false;
+        solver->decisions[solver->decisions_size].trail_position = solver->trail_size;
+        solver->decisions_size++;
+
+        sat_enqueue(solver, lit_pos(variable));
+    }
+}
+
+bool sat_solver_test_prefix(SatSolver *solver, int prefix_length) {
+    if (!sat_solver_reset_and_setup(solver, prefix_length)) {
+        return false;
+    }
+    return sat_search(solver);
+}
