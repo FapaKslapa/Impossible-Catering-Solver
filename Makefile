@@ -11,8 +11,12 @@ bernardo: $(SRC_DIR)/main.c
 test_line_reader: $(TEST_DIR)/test_line_reader.c $(SRC_DIR)/line_reader.c
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $^
 
-test: test_line_reader
+test_token_scanner: $(TEST_DIR)/test_token_scanner.c $(SRC_DIR)/token_scanner.c
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $^
+
+test: test_line_reader test_token_scanner
 	./test_line_reader
+	./test_token_scanner
 
 clean:
 	rm -f bernardo Lode Lode.c
