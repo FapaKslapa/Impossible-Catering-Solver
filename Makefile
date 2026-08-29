@@ -26,13 +26,17 @@ test_sat_propagate: $(TEST_DIR)/test_sat_propagate.c $(SRC_DIR)/sat_propagate.c 
 test_sat_solver: $(TEST_DIR)/test_sat_solver.c $(SRC_DIR)/sat_solver.c $(SRC_DIR)/sat_propagate.c $(SRC_DIR)/formula.c
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $^
 
-test: test_line_reader test_token_scanner test_dish_table test_formula_parser test_sat_propagate test_sat_solver
+test_threshold_search: $(TEST_DIR)/test_threshold_search.c $(SRC_DIR)/threshold_search.c $(SRC_DIR)/sat_solver.c $(SRC_DIR)/sat_propagate.c $(SRC_DIR)/formula.c
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $^
+
+test: test_line_reader test_token_scanner test_dish_table test_formula_parser test_sat_propagate test_sat_solver test_threshold_search
 	./test_line_reader
 	./test_token_scanner
 	./test_dish_table
 	./test_formula_parser
 	./test_sat_propagate
 	./test_sat_solver
+	./test_threshold_search
 
 clean:
 	rm -f bernardo Lode Lode.c
