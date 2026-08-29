@@ -151,10 +151,72 @@ static void test_reduce_preserves_content_after_compaction(void) {
     sat_solver_destroy(solver);
 }
 
+static void test_reduce_self_overlapping_copy(void) {
+    Formula formula = empty_formula(20);
+    SatSolver *solver = sat_solver_create(&formula);
+    solver->learned_clause_count = 0;
+    solver->learned_literal_pool_size = 0;
+    for (int i = 0; i < 20; i++) {
+        solver->watch_head[2 * i] = -1;
+        solver->watch_head[2 * i + 1] = -1;
+        solver->decision_level[i] = -1;
+        solver->antecedent[i] = -1;
+        solver->assignment[i] = VALUE_UNASSIGNED;
+    }
+
+    int clause0[] = {lit_pos(0)};
+    int clause1[] = {lit_pos(1), lit_neg(2), lit_pos(3), lit_neg(4), lit_pos(5), lit_neg(6), lit_pos(7), lit_neg(8)};
+    int clause2[] = {lit_neg(9)};
+    int clause3[] = {lit_pos(10), lit_neg(11), lit_pos(12), lit_neg(13), lit_pos(14), lit_neg(15), lit_pos(16), lit_neg(17)};
+
+    sat_add_learned_clause(solver, clause0, 1);
+    int index1 = sat_add_learned_clause(solver, clause1, 8);
+    sat_add_learned_clause(solver, clause2, 1);
+    int index3 = sat_add_learned_clause(solver, clause3, 8);
+
+    solver->assignment[18] = VALUE_TRUE;
+    solver->antecedent[18] = index1;
+    solver->assignment[19] = VALUE_TRUE;
+    solver->antecedent[19] = index3;
+
+    sat_reduce_learned_clauses(solver);
+
+    assert(solver->learned_clause_count == 2);
+
+    int new_index1 = solver->antecedent[18];
+    int new_index3 = solver->antecedent[19];
+
+    assert(new_index1 >= formula.clause_count);
+    assert(new_index3 >= formula.clause_count);
+
+    assert(sat_clause_size(solver, new_index1) == 8);
+    assert(sat_clause_literal(solver, new_index1, 0) == lit_pos(1));
+    assert(sat_clause_literal(solver, new_index1, 1) == lit_neg(2));
+    assert(sat_clause_literal(solver, new_index1, 2) == lit_pos(3));
+    assert(sat_clause_literal(solver, new_index1, 3) == lit_neg(4));
+    assert(sat_clause_literal(solver, new_index1, 4) == lit_pos(5));
+    assert(sat_clause_literal(solver, new_index1, 5) == lit_neg(6));
+    assert(sat_clause_literal(solver, new_index1, 6) == lit_pos(7));
+    assert(sat_clause_literal(solver, new_index1, 7) == lit_neg(8));
+
+    assert(sat_clause_size(solver, new_index3) == 8);
+    assert(sat_clause_literal(solver, new_index3, 0) == lit_pos(10));
+    assert(sat_clause_literal(solver, new_index3, 1) == lit_neg(11));
+    assert(sat_clause_literal(solver, new_index3, 2) == lit_pos(12));
+    assert(sat_clause_literal(solver, new_index3, 3) == lit_neg(13));
+    assert(sat_clause_literal(solver, new_index3, 4) == lit_pos(14));
+    assert(sat_clause_literal(solver, new_index3, 5) == lit_neg(15));
+    assert(sat_clause_literal(solver, new_index3, 6) == lit_pos(16));
+    assert(sat_clause_literal(solver, new_index3, 7) == lit_neg(17));
+
+    sat_solver_destroy(solver);
+}
+
 int main(void) {
     test_add_and_read_back();
     test_reduce_preserves_locked_clause();
     test_reduce_preserves_content_after_compaction();
+    test_reduce_self_overlapping_copy();
     printf("test_sat_clause_db: OK\n");
     return 0;
 }
