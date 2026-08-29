@@ -5,8 +5,12 @@ TEST_DIR = tests/unit
 
 .PHONY: all clean test bernardo
 
-bernardo: $(SRC_DIR)/main.c
-	$(CC) $(CFLAGS) -I$(SRC_DIR) -o bernardo $(SRC_DIR)/main.c
+BERNARDO_SOURCES = $(SRC_DIR)/line_reader.c $(SRC_DIR)/token_scanner.c $(SRC_DIR)/dish_table.c \
+                    $(SRC_DIR)/formula.c $(SRC_DIR)/formula_parser.c $(SRC_DIR)/sat_propagate.c \
+                    $(SRC_DIR)/sat_solver.c $(SRC_DIR)/threshold_search.c $(SRC_DIR)/result_printer.c
+
+bernardo: $(SRC_DIR)/main.c $(BERNARDO_SOURCES)
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -o bernardo $(SRC_DIR)/main.c $(BERNARDO_SOURCES)
 
 test_line_reader: $(TEST_DIR)/test_line_reader.c $(SRC_DIR)/line_reader.c
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $^
