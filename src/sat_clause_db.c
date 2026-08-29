@@ -61,8 +61,6 @@ void sat_reduce_learned_clauses(SatSolver *solver) {
         kept_count++;
     }
 
-    // The compaction loop below assumes survivor_indices[k] >= k for every k,
-    // which requires this array to be sorted ascending before compaction runs.
     qsort(survivor_indices, kept_count, sizeof(int), compare_int_ascending);
 
     for (int i = 0; i < solver->learned_clause_count; i++) {

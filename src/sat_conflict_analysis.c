@@ -1,8 +1,5 @@
 #include "sat_internal.h"
 
-// Caller must only call this for a conflict found at current_decision_level >= 1
-// with at least one conflicting-clause literal at that level; a level-0 conflict
-// is UNSAT and must be handled by the caller without reaching this function.
 int sat_analyze_conflict(SatSolver *solver, int conflicting_clause, int *out_literals, int *out_backjump_level) {
     solver->seen_epoch++;
     int out_size = 0;

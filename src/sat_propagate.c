@@ -15,7 +15,6 @@ static void set_watch_literal(SatSolver *solver, int clause_index, int old_liter
     }
 }
 
-/* A clause's two watched literals are always distinct: formula_parser dedupes literals, and a tautological clause is marked is_tautology with size 0 (not removed from Formula.clauses) so setup_clauses skips it when building the watch scheme; this equality check therefore unambiguously identifies which slot holds `literal`. The property survives relocation too, since find_replacement_literal excludes both current watches when scanning for a replacement, so a relocated watch can never collide with the clause's other current watch. */
 static int *next_pointer_for_slot(SatSolver *solver, int clause_index, int literal) {
     if (solver->watched_literal0[clause_index] == literal) {
         return &solver->next_watch0[clause_index];
@@ -73,8 +72,6 @@ static void unlink_clause_from_watch_list(SatSolver *solver, int clause_index, i
     }
 }
 
-// Caller must guarantee clause_index is currently registered via sat_watch_clause
-// on both watch lists; a size-1 clause was never watched and must never reach here.
 void sat_unwatch_clause(SatSolver *solver, int clause_index) {
     unlink_clause_from_watch_list(solver, clause_index, solver->watched_literal0[clause_index]);
     unlink_clause_from_watch_list(solver, clause_index, solver->watched_literal1[clause_index]);
