@@ -4,8 +4,8 @@
 #include "sat_solver.h"
 #include "sat_restart.h"
 
-#define SAT_LEARNED_POOL_CAPACITY 50000
-#define SAT_MAX_LEARNED_CLAUSES 8000
+#define SAT_LEARNED_POOL_CAPACITY 16000
+#define SAT_MAX_LEARNED_CLAUSES 2000
 
 typedef enum {
     VALUE_UNASSIGNED = 0,
@@ -18,6 +18,11 @@ typedef struct {
     int size;
     double activity;
 } LearnedClause;
+
+typedef struct {
+    int index;
+    double activity;
+} ActivityEntry;
 
 struct SatSolver {
     const Formula *formula;
@@ -60,6 +65,10 @@ struct SatSolver {
     int learned_clause_count;
     int learned_clause_capacity;
     double clause_activity_increment;
+    int *reduce_survivor_indices;
+    bool *reduce_survives;
+    ActivityEntry *reduce_unlocked;
+    int *reduce_remap;
 
     long long conflicts_since_restart;
     long long restart_index;

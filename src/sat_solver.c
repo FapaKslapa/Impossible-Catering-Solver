@@ -35,6 +35,10 @@ SatSolver *sat_solver_create(const Formula *formula) {
     solver->learned_literal_pool_capacity = SAT_LEARNED_POOL_CAPACITY;
     solver->learned_clauses = malloc(SAT_MAX_LEARNED_CLAUSES * sizeof(LearnedClause));
     solver->learned_clause_capacity = SAT_MAX_LEARNED_CLAUSES;
+    solver->reduce_survivor_indices = malloc(SAT_MAX_LEARNED_CLAUSES * sizeof(int));
+    solver->reduce_survives = malloc(SAT_MAX_LEARNED_CLAUSES * sizeof(bool));
+    solver->reduce_unlocked = malloc(SAT_MAX_LEARNED_CLAUSES * sizeof(ActivityEntry));
+    solver->reduce_remap = malloc(SAT_MAX_LEARNED_CLAUSES * sizeof(int));
 
     return solver;
 }
@@ -57,6 +61,10 @@ void sat_solver_destroy(SatSolver *solver) {
     free(solver->conflict_scratch);
     free(solver->learned_literal_pool);
     free(solver->learned_clauses);
+    free(solver->reduce_survivor_indices);
+    free(solver->reduce_survives);
+    free(solver->reduce_unlocked);
+    free(solver->reduce_remap);
     free(solver);
 }
 
