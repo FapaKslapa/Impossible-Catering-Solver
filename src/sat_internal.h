@@ -11,7 +11,7 @@ typedef enum {
 
 typedef struct {
     int variable;
-    bool tried_false;
+    bool tried_both;
     int trail_position;
 } Decision;
 
@@ -39,6 +39,12 @@ struct SatSolver {
 
     int *relevant_variables;
     int relevant_variable_count;
+
+    double *activity;
+    double activity_increment;
+    VariableValue *saved_phase;
+    int conflicts_since_restart;
+    int restart_limit;
 };
 
 bool sat_enqueue(SatSolver *solver, int literal);

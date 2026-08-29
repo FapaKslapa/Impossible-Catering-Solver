@@ -23,6 +23,8 @@ SatSolver *sat_solver_create(const Formula *formula) {
     solver->watched_literal1 = malloc(size_at_least_one(clause_count) * sizeof(int));
     solver->propagation_queue = malloc(size_at_least_one(variable_count) * sizeof(int));
     solver->relevant_variables = malloc(size_at_least_one(variable_count) * sizeof(int));
+    solver->activity = malloc(size_at_least_one(variable_count) * sizeof(double));
+    solver->saved_phase = malloc(size_at_least_one(variable_count) * sizeof(VariableValue));
 
     return solver;
 }
@@ -38,6 +40,8 @@ void sat_solver_destroy(SatSolver *solver) {
     free(solver->watched_literal1);
     free(solver->propagation_queue);
     free(solver->relevant_variables);
+    free(solver->activity);
+    free(solver->saved_phase);
     free(solver);
 }
 
@@ -57,6 +61,14 @@ static void reset_solver_state(SatSolver *solver, int prefix_length) {
     solver->propagation_queue_head = 0;
     solver->propagation_queue_tail = 0;
     solver->relevant_variable_count = 0;
+
+    for (int i = 0; i < variable_count; i++) {
+        solver->activity[i] = 0.0;
+        solver->saved_phase[i] = VALUE_TRUE;
+    }
+    solver->activity_increment = 1.0;
+    solver->conflicts_since_restart = 0;
+    solver->restart_limit = 100;
 }
 
 static bool setup_clauses(SatSolver *solver, bool *has_positive, bool *has_negative) {
@@ -150,40 +162,82 @@ bool sat_solver_reset_and_setup(SatSolver *solver, int prefix_length) {
 }
 
 static int pick_unassigned_variable(SatSolver *solver) {
+    int best_variable = -1;
+    double best_activity = -1.0;
     for (int i = 0; i < solver->relevant_variable_count; i++) {
         int variable = solver->relevant_variables[i];
-        if (solver->assignment[variable] == VALUE_UNASSIGNED) {
-            return variable;
+        if (solver->assignment[variable] != VALUE_UNASSIGNED) {
+            continue;
+        }
+        if (best_variable == -1 || solver->activity[variable] > best_activity) {
+            best_variable = variable;
+            best_activity = solver->activity[variable];
         }
     }
-    return -1;
+    return best_variable;
 }
 
 static void undo_to_trail_size(SatSolver *solver, int target_trail_size) {
     while (solver->trail_size > target_trail_size) {
         solver->trail_size--;
         int literal = solver->trail[solver->trail_size];
-        solver->assignment[lit_variable(literal)] = VALUE_UNASSIGNED;
+        int variable = lit_variable(literal);
+        solver->saved_phase[variable] = solver->assignment[variable];
+        solver->assignment[variable] = VALUE_UNASSIGNED;
     }
     solver->propagation_queue_head = solver->trail_size;
     solver->propagation_queue_tail = solver->trail_size;
 }
 
+static void bump_activity(SatSolver *solver) {
+    int from = solver->decisions_size > 0
+        ? solver->decisions[solver->decisions_size - 1].trail_position
+        : 0;
+    for (int t = from; t < solver->trail_size; t++) {
+        int variable = lit_variable(solver->trail[t]);
+        solver->activity[variable] += solver->activity_increment;
+    }
+    for (int d = 0; d < solver->decisions_size; d++) {
+        solver->activity[solver->decisions[d].variable] += solver->activity_increment;
+    }
+    solver->activity_increment *= 1.05;
+    if (solver->activity_increment > 1e100) {
+        for (int i = 0; i < solver->relevant_variable_count; i++) {
+            solver->activity[solver->relevant_variables[i]] *= 1e-100;
+        }
+        solver->activity_increment *= 1e-100;
+    }
+}
+
 static bool sat_search(SatSolver *solver) {
+    int base_trail_size = solver->trail_size;
     for (;;) {
         bool no_conflict = sat_propagate(solver);
         if (!no_conflict) {
+            bump_activity(solver);
+
             while (solver->decisions_size > 0 &&
-                   solver->decisions[solver->decisions_size - 1].tried_false) {
+                   solver->decisions[solver->decisions_size - 1].tried_both) {
                 solver->decisions_size--;
             }
             if (solver->decisions_size == 0) {
                 return false;
             }
+
+            solver->conflicts_since_restart++;
+            if (solver->conflicts_since_restart >= solver->restart_limit) {
+                undo_to_trail_size(solver, base_trail_size);
+                solver->decisions_size = 0;
+                solver->conflicts_since_restart = 0;
+                solver->restart_limit = solver->restart_limit + solver->restart_limit / 4 + 10;
+                continue;
+            }
+
             Decision *decision = &solver->decisions[solver->decisions_size - 1];
+            int tried_literal = solver->trail[decision->trail_position];
             undo_to_trail_size(solver, decision->trail_position);
-            decision->tried_false = true;
-            sat_enqueue(solver, lit_neg(decision->variable));
+            decision->tried_both = true;
+            sat_enqueue(solver, lit_negate(tried_literal));
             continue;
         }
 
@@ -193,11 +247,12 @@ static bool sat_search(SatSolver *solver) {
         }
 
         solver->decisions[solver->decisions_size].variable = variable;
-        solver->decisions[solver->decisions_size].tried_false = false;
+        solver->decisions[solver->decisions_size].tried_both = false;
         solver->decisions[solver->decisions_size].trail_position = solver->trail_size;
         solver->decisions_size++;
 
-        sat_enqueue(solver, lit_pos(variable));
+        int literal = (solver->saved_phase[variable] == VALUE_FALSE) ? lit_neg(variable) : lit_pos(variable);
+        sat_enqueue(solver, literal);
     }
 }
 
