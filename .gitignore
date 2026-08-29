@@ -12,3 +12,9 @@ test_sat_propagate
 test_sat_solver
 test_threshold_search
 test_result_printer
+test_sat_restart
+test_sat_clause_db
+test_sat_conflict_analysis
+test_sat_undo_to_level
+*.dSYM/
+core

@@ -6,7 +6,7 @@ int sat_analyze_conflict(SatSolver *solver, int conflicting_clause, int *out_lit
     int count_at_current_level = 0;
     int clause_to_resolve = conflicting_clause;
     int trail_index = solver->trail_size - 1;
-    int pivot_variable = -1;
+    int pivot_variable;
 
     for (;;) {
         int size = sat_clause_size(solver, clause_to_resolve);

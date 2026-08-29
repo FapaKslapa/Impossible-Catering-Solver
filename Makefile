@@ -66,3 +66,6 @@ test: test_line_reader test_token_scanner test_dish_table test_formula_parser te
 clean:
 	rm -f bernardo Lode Lode.c
 	rm -f $(TEST_DIR)/*.o
+	rm -f test_line_reader test_token_scanner test_dish_table test_formula_parser
+	rm -f test_sat_propagate test_sat_solver test_sat_clause_db test_threshold_search
+	rm -f test_result_printer test_sat_restart test_sat_conflict_analysis test_sat_undo_to_level
