@@ -103,6 +103,10 @@ static void formula_builder_add_clause(FormulaBuilder *builder, int raw_count) {
 static bool parse_request_line(char *line, DishTable *dishes, FormulaBuilder *builder) {
     TokenList tokens;
     tokenize_line(line, &tokens);
+    if (tokens.count == 0) {
+        token_list_destroy(&tokens);
+        return true;
+    }
     formula_builder_reserve_scratch(builder, (int) tokens.count);
     bool ok = true;
     for (size_t i = 0; i < tokens.count; i++) {

@@ -47,6 +47,16 @@ int main(void) {
     fclose(file4);
     formula_destroy(&formula4);
 
+    const char *input5 = "pizza sushi\npizza pizza sushi\n";
+    FILE *file5 = open_text(input5);
+    Formula formula5;
+    assert(formula_parse(file5, &formula5));
+    assert(formula5.variable_count == 2);
+    assert(formula5.clause_count == 1);
+    assert(formula5.clauses[0].size == 2);
+    fclose(file5);
+    formula_destroy(&formula5);
+
     printf("test_formula_parser: OK\n");
     return 0;
 }

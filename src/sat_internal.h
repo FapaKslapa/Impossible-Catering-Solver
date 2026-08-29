@@ -43,8 +43,8 @@ struct SatSolver {
     double *activity;
     double activity_increment;
     VariableValue *saved_phase;
-    int conflicts_since_restart;
-    int restart_limit;
+    long long conflicts_since_restart;
+    long long restart_limit;
 };
 
 bool sat_enqueue(SatSolver *solver, int literal);
