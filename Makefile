@@ -36,7 +36,10 @@ test_threshold_search: $(TEST_DIR)/test_threshold_search.c $(SRC_DIR)/threshold_
 test_result_printer: $(TEST_DIR)/test_result_printer.c $(SRC_DIR)/result_printer.c
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $^
 
-test: test_line_reader test_token_scanner test_dish_table test_formula_parser test_sat_propagate test_sat_solver test_threshold_search test_result_printer
+test_sat_restart: $(TEST_DIR)/test_sat_restart.c $(SRC_DIR)/sat_restart.c
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $^
+
+test: test_line_reader test_token_scanner test_dish_table test_formula_parser test_sat_propagate test_sat_solver test_threshold_search test_result_printer test_sat_restart
 	./test_line_reader
 	./test_token_scanner
 	./test_dish_table
@@ -45,6 +48,7 @@ test: test_line_reader test_token_scanner test_dish_table test_formula_parser te
 	./test_sat_solver
 	./test_threshold_search
 	./test_result_printer
+	./test_sat_restart
 
 clean:
 	rm -f bernardo Lode Lode.c
