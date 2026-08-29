@@ -85,6 +85,7 @@ static inline int sat_clause_literal(const SatSolver *solver, int clause_index, 
 bool sat_enqueue(SatSolver *solver, int literal, int antecedent_clause);
 bool sat_propagate(SatSolver *solver, int *out_conflict_clause);
 bool sat_solver_reset_and_setup(SatSolver *solver, int prefix_length);
+void undo_to_level(SatSolver *solver, int target_level);
 
 void sat_watch_clause(SatSolver *solver, int clause_index, int literal_a, int literal_b);
 void sat_unwatch_clause(SatSolver *solver, int clause_index);
