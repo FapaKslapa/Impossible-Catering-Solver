@@ -31,7 +31,8 @@ static void test_propagation_chain(void) {
 
     SatSolver *solver = sat_solver_create(&formula);
     assert(sat_solver_reset_and_setup(solver, 4));
-    assert(sat_propagate(solver));
+    int conflict_clause;
+    assert(sat_propagate(solver, &conflict_clause));
 
     assert(solver->assignment[a] == VALUE_FALSE);
     assert(solver->assignment[b] == VALUE_TRUE);
@@ -59,14 +60,16 @@ static void test_propagation_conflict(void) {
 
     SatSolver *solver = sat_solver_create(&formula);
     assert(sat_solver_reset_and_setup(solver, 5));
-    assert(!sat_propagate(solver));
+    int conflict_clause;
+    assert(!sat_propagate(solver, &conflict_clause));
+    assert(conflict_clause == 2);
 
     sat_solver_destroy(solver);
 }
 
 static void test_propagation_relocation(void) {
     int a = 0, b = 1, c = 2, d = 3;
-    int pool[9];
+    int pool[11];
     pool[0] = lit_pos(a); pool[1] = lit_pos(b); pool[2] = lit_pos(c);
     pool[3] = lit_pos(a); pool[4] = lit_pos(d);
     pool[5] = lit_neg(a);
@@ -81,7 +84,8 @@ static void test_propagation_relocation(void) {
 
     SatSolver *solver = sat_solver_create(&formula);
     assert(sat_solver_reset_and_setup(solver, 4));
-    assert(sat_propagate(solver));
+    int conflict_clause;
+    assert(sat_propagate(solver, &conflict_clause));
 
     assert(solver->assignment[a] == VALUE_FALSE);
     assert(solver->assignment[d] == VALUE_TRUE);

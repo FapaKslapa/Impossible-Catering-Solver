@@ -35,10 +35,9 @@ static VariableValue literal_value(const SatSolver *solver, int literal) {
 }
 
 static bool find_replacement_literal(SatSolver *solver, int clause_index, int avoid_literal_a, int avoid_literal_b, int *out_literal) {
-    const Formula *formula = solver->formula;
-    const Clause *clause = &formula->clauses[clause_index];
-    for (int i = 0; i < clause->size; i++) {
-        int literal = formula->literal_pool[clause->offset + i];
+    int size = sat_clause_size(solver, clause_index);
+    for (int i = 0; i < size; i++) {
+        int literal = sat_clause_literal(solver, clause_index, i);
         if (literal == avoid_literal_a || literal == avoid_literal_b) {
             continue;
         }
@@ -50,7 +49,38 @@ static bool find_replacement_literal(SatSolver *solver, int clause_index, int av
     return false;
 }
 
-bool sat_enqueue(SatSolver *solver, int literal) {
+void sat_watch_clause(SatSolver *solver, int clause_index, int literal_a, int literal_b) {
+    solver->watched_literal0[clause_index] = literal_a;
+    solver->watched_literal1[clause_index] = literal_b;
+    solver->next_watch0[clause_index] = solver->watch_head[literal_a];
+    solver->watch_head[literal_a] = clause_index;
+    solver->next_watch1[clause_index] = solver->watch_head[literal_b];
+    solver->watch_head[literal_b] = clause_index;
+}
+
+static void unlink_clause_from_watch_list(SatSolver *solver, int clause_index, int literal) {
+    int previous_clause = -1;
+    int current_clause = solver->watch_head[literal];
+    while (current_clause != clause_index) {
+        previous_clause = current_clause;
+        current_clause = *next_pointer_for_slot(solver, current_clause, literal);
+    }
+    int next_clause = *next_pointer_for_slot(solver, clause_index, literal);
+    if (previous_clause == -1) {
+        solver->watch_head[literal] = next_clause;
+    } else {
+        *next_pointer_for_slot(solver, previous_clause, literal) = next_clause;
+    }
+}
+
+// Caller must guarantee clause_index is currently registered via sat_watch_clause
+// on both watch lists; a size-1 clause was never watched and must never reach here.
+void sat_unwatch_clause(SatSolver *solver, int clause_index) {
+    unlink_clause_from_watch_list(solver, clause_index, solver->watched_literal0[clause_index]);
+    unlink_clause_from_watch_list(solver, clause_index, solver->watched_literal1[clause_index]);
+}
+
+bool sat_enqueue(SatSolver *solver, int literal, int antecedent_clause) {
     int variable = lit_variable(literal);
     bool literal_is_negative = (literal & 1) != 0;
     VariableValue wanted = literal_is_negative ? VALUE_FALSE : VALUE_TRUE;
@@ -62,6 +92,8 @@ bool sat_enqueue(SatSolver *solver, int literal) {
         return false;
     }
     solver->assignment[variable] = wanted;
+    solver->decision_level[variable] = solver->current_decision_level;
+    solver->antecedent[variable] = antecedent_clause;
     solver->trail[solver->trail_size] = literal;
     solver->trail_size++;
     solver->propagation_queue[solver->propagation_queue_tail] = literal;
@@ -69,7 +101,7 @@ bool sat_enqueue(SatSolver *solver, int literal) {
     return true;
 }
 
-bool sat_propagate(SatSolver *solver) {
+bool sat_propagate(SatSolver *solver, int *out_conflict_clause) {
     while (solver->propagation_queue_head < solver->propagation_queue_tail) {
         int true_literal = solver->propagation_queue[solver->propagation_queue_head];
         solver->propagation_queue_head++;
@@ -109,10 +141,12 @@ bool sat_propagate(SatSolver *solver) {
             }
 
             if (other_value == VALUE_FALSE) {
+                *out_conflict_clause = current_clause;
                 return false;
             }
 
-            if (!sat_enqueue(solver, other_literal)) {
+            if (!sat_enqueue(solver, other_literal, current_clause)) {
+                *out_conflict_clause = current_clause;
                 return false;
             }
 

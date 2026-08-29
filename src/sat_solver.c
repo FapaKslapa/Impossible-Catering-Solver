@@ -14,25 +14,36 @@ SatSolver *sat_solver_create(const Formula *formula) {
     int literal_count = variable_count * 2;
 
     solver->assignment = malloc(size_at_least_one(variable_count) * sizeof(VariableValue));
+    solver->decision_level = malloc(size_at_least_one(variable_count) * sizeof(int));
+    solver->antecedent = malloc(size_at_least_one(variable_count) * sizeof(int));
     solver->trail = malloc(size_at_least_one(variable_count) * sizeof(int));
-    solver->decisions = malloc(size_at_least_one(variable_count) * sizeof(Decision));
     solver->watch_head = malloc(size_at_least_one(literal_count) * sizeof(int));
-    solver->next_watch0 = malloc(size_at_least_one(clause_count) * sizeof(int));
-    solver->next_watch1 = malloc(size_at_least_one(clause_count) * sizeof(int));
-    solver->watched_literal0 = malloc(size_at_least_one(clause_count) * sizeof(int));
-    solver->watched_literal1 = malloc(size_at_least_one(clause_count) * sizeof(int));
     solver->propagation_queue = malloc(size_at_least_one(variable_count) * sizeof(int));
     solver->relevant_variables = malloc(size_at_least_one(variable_count) * sizeof(int));
     solver->activity = malloc(size_at_least_one(variable_count) * sizeof(double));
     solver->saved_phase = malloc(size_at_least_one(variable_count) * sizeof(VariableValue));
+    solver->seen = malloc(size_at_least_one(variable_count) * sizeof(int));
+    solver->conflict_scratch = malloc(size_at_least_one(variable_count) * sizeof(int));
+
+    int max_clause_count = clause_count + SAT_MAX_LEARNED_CLAUSES;
+    solver->next_watch0 = malloc(size_at_least_one(max_clause_count) * sizeof(int));
+    solver->next_watch1 = malloc(size_at_least_one(max_clause_count) * sizeof(int));
+    solver->watched_literal0 = malloc(size_at_least_one(max_clause_count) * sizeof(int));
+    solver->watched_literal1 = malloc(size_at_least_one(max_clause_count) * sizeof(int));
+
+    solver->learned_literal_pool = malloc(SAT_LEARNED_POOL_CAPACITY * sizeof(int));
+    solver->learned_literal_pool_capacity = SAT_LEARNED_POOL_CAPACITY;
+    solver->learned_clauses = malloc(SAT_MAX_LEARNED_CLAUSES * sizeof(LearnedClause));
+    solver->learned_clause_capacity = SAT_MAX_LEARNED_CLAUSES;
 
     return solver;
 }
 
 void sat_solver_destroy(SatSolver *solver) {
     free(solver->assignment);
+    free(solver->decision_level);
+    free(solver->antecedent);
     free(solver->trail);
-    free(solver->decisions);
     free(solver->watch_head);
     free(solver->next_watch0);
     free(solver->next_watch1);
@@ -42,6 +53,10 @@ void sat_solver_destroy(SatSolver *solver) {
     free(solver->relevant_variables);
     free(solver->activity);
     free(solver->saved_phase);
+    free(solver->seen);
+    free(solver->conflict_scratch);
+    free(solver->learned_literal_pool);
+    free(solver->learned_clauses);
     free(solver);
 }
 
@@ -52,28 +67,33 @@ static void reset_solver_state(SatSolver *solver, int prefix_length) {
     solver->prefix_length = prefix_length;
     for (int i = 0; i < variable_count; i++) {
         solver->assignment[i] = VALUE_UNASSIGNED;
+        solver->decision_level[i] = -1;
+        solver->antecedent[i] = -1;
+        solver->activity[i] = 0.0;
+        solver->saved_phase[i] = VALUE_TRUE;
+        solver->seen[i] = 0;
     }
     for (int i = 0; i < literal_count; i++) {
         solver->watch_head[i] = -1;
     }
     solver->trail_size = 0;
-    solver->decisions_size = 0;
+    solver->current_decision_level = 0;
     solver->propagation_queue_head = 0;
     solver->propagation_queue_tail = 0;
     solver->relevant_variable_count = 0;
-
-    for (int i = 0; i < variable_count; i++) {
-        solver->activity[i] = 0.0;
-        solver->saved_phase[i] = VALUE_TRUE;
-    }
     solver->activity_increment = 1.0;
+    solver->seen_epoch = 0;
+    solver->learned_literal_pool_size = 0;
+    solver->learned_clause_count = 0;
+    solver->clause_activity_increment = 1.0;
     solver->conflicts_since_restart = 0;
-    solver->restart_limit = 100;
+    solver->restart_index = 0;
+    solver->restart_limit = 100 * sat_luby(1);
 }
 
-static bool setup_clauses(SatSolver *solver, bool *has_positive, bool *has_negative) {
+static bool setup_clauses(SatSolver *solver) {
     const Formula *formula = solver->formula;
-    bool *seen = calloc(size_at_least_one(formula->variable_count), sizeof(bool));
+    bool *seen_relevant = calloc(size_at_least_one(formula->variable_count), sizeof(bool));
 
     bool ok = true;
     for (int clause_index = 0; clause_index < solver->prefix_length; clause_index++) {
@@ -89,20 +109,15 @@ static bool setup_clauses(SatSolver *solver, bool *has_positive, bool *has_negat
         for (int i = 0; i < clause->size; i++) {
             int literal = formula->literal_pool[clause->offset + i];
             int variable = lit_variable(literal);
-            if (!seen[variable]) {
-                seen[variable] = true;
+            if (!seen_relevant[variable]) {
+                seen_relevant[variable] = true;
                 solver->relevant_variables[solver->relevant_variable_count] = variable;
                 solver->relevant_variable_count++;
-            }
-            if ((literal & 1) != 0) {
-                has_negative[variable] = true;
-            } else {
-                has_positive[variable] = true;
             }
         }
 
         if (clause->size == 1) {
-            if (!sat_enqueue(solver, formula->literal_pool[clause->offset])) {
+            if (!sat_enqueue(solver, formula->literal_pool[clause->offset], clause_index)) {
                 ok = false;
                 break;
             }
@@ -111,154 +126,14 @@ static bool setup_clauses(SatSolver *solver, bool *has_positive, bool *has_negat
 
         int literal0 = formula->literal_pool[clause->offset];
         int literal1 = formula->literal_pool[clause->offset + 1];
-        solver->watched_literal0[clause_index] = literal0;
-        solver->watched_literal1[clause_index] = literal1;
-        solver->next_watch0[clause_index] = solver->watch_head[literal0];
-        solver->watch_head[literal0] = clause_index;
-        solver->next_watch1[clause_index] = solver->watch_head[literal1];
-        solver->watch_head[literal1] = clause_index;
+        sat_watch_clause(solver, clause_index, literal0, literal1);
     }
 
-    free(seen);
+    free(seen_relevant);
     return ok;
-}
-
-static bool apply_pure_literals(SatSolver *solver, const bool *has_positive, const bool *has_negative) {
-    for (int i = 0; i < solver->relevant_variable_count; i++) {
-        int variable = solver->relevant_variables[i];
-        if (solver->assignment[variable] != VALUE_UNASSIGNED) {
-            continue;
-        }
-        bool positive = has_positive[variable];
-        bool negative = has_negative[variable];
-        if (positive && !negative) {
-            if (!sat_enqueue(solver, lit_pos(variable))) {
-                return false;
-            }
-        } else if (negative && !positive) {
-            if (!sat_enqueue(solver, lit_neg(variable))) {
-                return false;
-            }
-        }
-    }
-    return true;
 }
 
 bool sat_solver_reset_and_setup(SatSolver *solver, int prefix_length) {
     reset_solver_state(solver, prefix_length);
-
-    int variable_count = solver->formula->variable_count;
-    bool *has_positive = calloc(size_at_least_one(variable_count), sizeof(bool));
-    bool *has_negative = calloc(size_at_least_one(variable_count), sizeof(bool));
-
-    bool ok = setup_clauses(solver, has_positive, has_negative);
-    if (ok) {
-        ok = apply_pure_literals(solver, has_positive, has_negative);
-    }
-
-    free(has_positive);
-    free(has_negative);
-    return ok;
-}
-
-static int pick_unassigned_variable(SatSolver *solver) {
-    int best_variable = -1;
-    double best_activity = -1.0;
-    for (int i = 0; i < solver->relevant_variable_count; i++) {
-        int variable = solver->relevant_variables[i];
-        if (solver->assignment[variable] != VALUE_UNASSIGNED) {
-            continue;
-        }
-        if (best_variable == -1 || solver->activity[variable] > best_activity) {
-            best_variable = variable;
-            best_activity = solver->activity[variable];
-        }
-    }
-    return best_variable;
-}
-
-static void undo_to_trail_size(SatSolver *solver, int target_trail_size) {
-    while (solver->trail_size > target_trail_size) {
-        solver->trail_size--;
-        int literal = solver->trail[solver->trail_size];
-        int variable = lit_variable(literal);
-        solver->saved_phase[variable] = solver->assignment[variable];
-        solver->assignment[variable] = VALUE_UNASSIGNED;
-    }
-    solver->propagation_queue_head = solver->trail_size;
-    solver->propagation_queue_tail = solver->trail_size;
-}
-
-static void bump_activity(SatSolver *solver) {
-    int from = solver->decisions_size > 0
-        ? solver->decisions[solver->decisions_size - 1].trail_position
-        : 0;
-    for (int t = from; t < solver->trail_size; t++) {
-        int variable = lit_variable(solver->trail[t]);
-        solver->activity[variable] += solver->activity_increment;
-    }
-    for (int d = 0; d < solver->decisions_size; d++) {
-        solver->activity[solver->decisions[d].variable] += solver->activity_increment;
-    }
-    solver->activity_increment *= 1.05;
-    if (solver->activity_increment > 1e100) {
-        for (int i = 0; i < solver->relevant_variable_count; i++) {
-            solver->activity[solver->relevant_variables[i]] *= 1e-100;
-        }
-        solver->activity_increment *= 1e-100;
-    }
-}
-
-static bool sat_search(SatSolver *solver) {
-    int base_trail_size = solver->trail_size;
-    for (;;) {
-        bool no_conflict = sat_propagate(solver);
-        if (!no_conflict) {
-            bump_activity(solver);
-
-            while (solver->decisions_size > 0 &&
-                   solver->decisions[solver->decisions_size - 1].tried_both) {
-                solver->decisions_size--;
-            }
-            if (solver->decisions_size == 0) {
-                return false;
-            }
-
-            solver->conflicts_since_restart++;
-            if (solver->conflicts_since_restart >= solver->restart_limit) {
-                undo_to_trail_size(solver, base_trail_size);
-                solver->decisions_size = 0;
-                solver->conflicts_since_restart = 0;
-                solver->restart_limit = solver->restart_limit + solver->restart_limit / 4 + 10;
-                continue;
-            }
-
-            Decision *decision = &solver->decisions[solver->decisions_size - 1];
-            int tried_literal = solver->trail[decision->trail_position];
-            undo_to_trail_size(solver, decision->trail_position);
-            decision->tried_both = true;
-            sat_enqueue(solver, lit_negate(tried_literal));
-            continue;
-        }
-
-        int variable = pick_unassigned_variable(solver);
-        if (variable == -1) {
-            return true;
-        }
-
-        solver->decisions[solver->decisions_size].variable = variable;
-        solver->decisions[solver->decisions_size].tried_both = false;
-        solver->decisions[solver->decisions_size].trail_position = solver->trail_size;
-        solver->decisions_size++;
-
-        int literal = (solver->saved_phase[variable] == VALUE_FALSE) ? lit_neg(variable) : lit_pos(variable);
-        sat_enqueue(solver, literal);
-    }
-}
-
-bool sat_solver_test_prefix(SatSolver *solver, int prefix_length) {
-    if (!sat_solver_reset_and_setup(solver, prefix_length)) {
-        return false;
-    }
-    return sat_search(solver);
+    return setup_clauses(solver);
 }

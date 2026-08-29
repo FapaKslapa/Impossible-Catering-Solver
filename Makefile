@@ -24,7 +24,7 @@ test_dish_table: $(TEST_DIR)/test_dish_table.c $(SRC_DIR)/dish_table.c
 test_formula_parser: $(TEST_DIR)/test_formula_parser.c $(SRC_DIR)/formula_parser.c $(SRC_DIR)/formula.c $(SRC_DIR)/line_reader.c $(SRC_DIR)/token_scanner.c $(SRC_DIR)/dish_table.c
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $^
 
-test_sat_propagate: $(TEST_DIR)/test_sat_propagate.c $(SRC_DIR)/sat_propagate.c $(SRC_DIR)/sat_solver.c $(SRC_DIR)/formula.c
+test_sat_propagate: $(TEST_DIR)/test_sat_propagate.c $(SRC_DIR)/sat_propagate.c $(SRC_DIR)/sat_solver.c $(SRC_DIR)/sat_restart.c $(SRC_DIR)/formula.c
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $^
 
 test_sat_solver: $(TEST_DIR)/test_sat_solver.c $(SRC_DIR)/sat_solver.c $(SRC_DIR)/sat_propagate.c $(SRC_DIR)/formula.c
